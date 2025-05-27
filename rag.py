@@ -29,6 +29,10 @@ model_parameters = {
             }
         }
 
+def response_cleaner(og_res:str) -> str:
+    new_res = og_res.strip()
+    return new_res
+
 def load_llm(model_name: str) -> llama_cpp.llama.Llama:
     parameters = model_parameters[model_name]
     llm = Llama.from_pretrained(repo_id=parameters['repo_id'], filename=parameters['filename'], verbose=False)
@@ -59,19 +63,28 @@ def main():
 
     index = load_index(document_embeddings)
 
+    exitflag = 0
+
     while True:
         query = input("\nEnter your Question: ")
+        if query.lower().strip() == "exit":
+            exitflag = 1
+            break
         query_embeddings = embedder.encode([query])
 
         context = get_context(index, chunkified_document, query_embeddings)
 
         prompt = ("You are an expert assistant. Using the context provided, give a **concise and factual answer** to the question in plain text. "
                   "Do not use formatting and add any extra content. If you do not find the answer in the context, say you do not know. "
-                  f"\n\nContext: {context}\nQuestion: {query}\nAnswer: ")
+                  f"\nContext: {context}\nQuestion: {query}\nAnswer: ")
 
         response = llm(prompt, max_tokens=2048)
+        cleaned_response = response_cleaner(response['choices'][0]['text'])
 
-        print(response['choices'][0]['text'])
+        print(cleaned_response)
+    
+    if exitflag == 1:
+        print("Thank you and have a nice day!")
 
 if __name__ == "__main__":
     main()
