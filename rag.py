@@ -1,3 +1,5 @@
+import faiss.swigfaiss
+import faiss.swigfaiss_avx2
 from docCleaner import md_doc_reader
 from sentence_transformers import SentenceTransformer
 from llama_cpp import Llama
@@ -32,12 +34,13 @@ def load_llm(model_name: str) -> llama_cpp.llama.Llama:
     llm = Llama.from_pretrained(repo_id=parameters['repo_id'], filename=parameters['filename'], verbose=False)
     return llm
 
-def get_context(chunkified_document:list[str], document_embeddings:np.ndarray, query_embeddings:np.ndarray):
+def load_index(document_embeddings:np.ndarray) -> faiss.swigfaiss_avx2.IndexFlatL2:
     index = faiss.IndexFlatL2(document_embeddings.shape[1])
     index.add(np.array(document_embeddings))
+    return index
 
+def get_context(index:faiss.swigfaiss_avx2.IndexFlatL2, chunkified_document:list[str], query_embeddings:np.ndarray) -> str:
     D, I = index.search(np.array(query_embeddings), k=3)
-
     top_chunks = [chunkified_document[i] for i in I[0]]
     context = "\n".join(top_chunks)
 
@@ -54,13 +57,17 @@ def main():
 
     document_embeddings = embedder.encode(chunkified_document)
 
+    index = load_index(document_embeddings)
+
     while True:
         query = input("\nEnter your Question: ")
         query_embeddings = embedder.encode([query])
 
-        context = get_context(chunkified_document, document_embeddings, query_embeddings)
+        context = get_context(index, chunkified_document, query_embeddings)
 
-        prompt = f"You are an expert assistant. Using the context provided, give a **concise and factual answer** to the question in plain text. Do not use formatting and add any extra content.  \n\nContext: {context}\nQuestion: {query}\nAnswer: "
+        prompt = ("You are an expert assistant. Using the context provided, give a **concise and factual answer** to the question in plain text. "
+                  "Do not use formatting and add any extra content. If you do not find the answer in the context, say you do not know. "
+                  f"\n\nContext: {context}\nQuestion: {query}\nAnswer: ")
 
         response = llm(prompt, max_tokens=2048)
 
