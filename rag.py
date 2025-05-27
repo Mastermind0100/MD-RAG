@@ -1,0 +1,70 @@
+from docCleaner import md_doc_reader
+from sentence_transformers import SentenceTransformer
+from llama_cpp import Llama
+import numpy as np
+import logging
+import faiss
+import llama_cpp
+
+logging.getLogger("llama_cpp").setLevel(logging.WARNING)
+
+model_parameters = {
+            "medQwen": {
+                "repo_id": "mradermacher/Qwen-3-32B-Medical-Reasoning-i1-GGUF",
+                "filename": "Qwen-3-32B-Medical-Reasoning.i1-IQ1_M.gguf"
+            },
+            "gemma3-1b": {
+                "repo_id": "google/gemma-3-1b-it-qat-q4_0-gguf",
+                "filename": "gemma-3-1b-it-q4_0.gguf"
+            },
+            "gemma-2b": {
+                "repo_id": "google/gemma-2b-it-GGUF",
+                "filename": "gemma-2b-it.gguf"
+            },
+            "mistral-7b": {
+                "repo_id": "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
+                "filename":"mistral-7b-instruct-v0.2.Q2_K.gguf"
+            }
+        }
+
+def load_llm(model_name: str) -> llama_cpp.llama.Llama:
+    parameters = model_parameters[model_name]
+    llm = Llama.from_pretrained(repo_id=parameters['repo_id'], filename=parameters['filename'], verbose=False)
+    return llm
+
+def get_context(chunkified_document:list[str], document_embeddings:np.ndarray, query_embeddings:np.ndarray):
+    index = faiss.IndexFlatL2(document_embeddings.shape[1])
+    index.add(np.array(document_embeddings))
+
+    D, I = index.search(np.array(query_embeddings), k=3)
+
+    top_chunks = [chunkified_document[i] for i in I[0]]
+    context = "\n".join(top_chunks)
+
+    return context
+
+def main():
+    document_filepath = "data/README.md"
+    embedding_model_name = "all-MiniLM-L6-v2"
+
+    llm = load_llm("mistral-7b")    
+    
+    chunkified_document = md_doc_reader(filepath=document_filepath,token_limit=200)
+    embedder = SentenceTransformer(embedding_model_name)
+
+    document_embeddings = embedder.encode(chunkified_document)
+
+    while True:
+        query = input("\nEnter your Question: ")
+        query_embeddings = embedder.encode([query])
+
+        context = get_context(chunkified_document, document_embeddings, query_embeddings)
+
+        prompt = f"You are an expert assistant. Using the context provided, give a **concise and factual answer** to the question in plain text. Do not use formatting and add any extra content.  \n\nContext: {context}\nQuestion: {query}\nAnswer: "
+
+        response = llm(prompt, max_tokens=2048)
+
+        print(response['choices'][0]['text'])
+
+if __name__ == "__main__":
+    main()
