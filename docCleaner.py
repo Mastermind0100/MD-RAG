@@ -91,7 +91,7 @@ def chunkify_document(document:list[langchain_core.documents.base.Document], tok
                 heading += f" < ## {minor_heading}"
             if sub_heading:
                 heading += f" < ### {sub_heading}"
-            full_text = heading + '\n' + section.page_content.strip()
+            full_text = heading + '\nContent:' + section.page_content.strip()
 
             # chunk = f"Major Heading: {major_heading},\nMinor Heading: {minor_heading},\nSub Heading: {sub_heading},\nContent: {content}\n"
             final_chunkified_document.append(full_text)

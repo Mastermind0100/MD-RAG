@@ -1,4 +1,3 @@
-import faiss.swigfaiss
 import faiss.swigfaiss_avx2
 from docCleaner import md_doc_reader
 from sentence_transformers import SentenceTransformer
@@ -7,6 +6,7 @@ import numpy as np
 import logging
 import faiss
 import llama_cpp
+import json
 
 logging.getLogger("llama_cpp").setLevel(logging.WARNING)
 
@@ -38,10 +38,14 @@ def load_llm(model_name: str) -> llama_cpp.llama.Llama:
     llm = Llama.from_pretrained(repo_id=parameters['repo_id'], filename=parameters['filename'], verbose=False)
     return llm
 
-def load_index(document_embeddings:np.ndarray) -> faiss.swigfaiss_avx2.IndexFlatL2:
-    index = faiss.IndexFlatL2(document_embeddings.shape[1])
-    index.add(np.array(document_embeddings))
+def load_index(index_filepath:str) -> faiss.swigfaiss_avx2.IndexFlatL2:
+    index = faiss.read_index(index_filepath)
     return index
+
+def load_document(document_filepath:str) -> list[str]:
+    with open(document_filepath, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    return data
 
 def get_context(index:faiss.swigfaiss_avx2.IndexFlatL2, chunkified_document:list[str], query_embeddings:np.ndarray) -> str:
     D, I = index.search(np.array(query_embeddings), k=3)
@@ -51,17 +55,16 @@ def get_context(index:faiss.swigfaiss_avx2.IndexFlatL2, chunkified_document:list
     return context
 
 def main():
-    document_filepath = "data/README.md"
+    document_filepath = "data/document_chunks.json"
     embedding_model_name = "all-MiniLM-L6-v2"
+    index_filepath = "data/faiss_index.idx"
 
     llm = load_llm("mistral-7b")    
     
-    chunkified_document = md_doc_reader(filepath=document_filepath,token_limit=200)
     embedder = SentenceTransformer(embedding_model_name)
 
-    document_embeddings = embedder.encode(chunkified_document)
-
-    index = load_index(document_embeddings)
+    index = load_index(index_filepath)
+    chunkified_document = load_document(document_filepath)
 
     exitflag = 0
 
