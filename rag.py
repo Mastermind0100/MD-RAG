@@ -25,7 +25,11 @@ model_parameters = {
             },
             "mistral-7b": {
                 "repo_id": "TheBloke/Mistral-7B-Instruct-v0.2-GGUF",
-                "filename":"mistral-7b-instruct-v0.2.Q2_K.gguf"
+                "filename":"mistral-7b-instruct-v0.2.Q4_K_M.gguf"
+            },
+            "medgamma": {
+                "repo_id": "gaianet/medgemma-4b-it-GGUF",
+                "filename":"medgemma-4b-it-Q2_K.gguf"
             }
         }
 
@@ -35,7 +39,13 @@ def response_cleaner(og_res:str) -> str:
 
 def load_llm(model_name: str) -> llama_cpp.llama.Llama:
     parameters = model_parameters[model_name]
-    llm = Llama.from_pretrained(repo_id=parameters['repo_id'], filename=parameters['filename'], verbose=False)
+    llm = Llama.from_pretrained(
+        repo_id=parameters['repo_id'], 
+        filename=parameters['filename'], 
+        verbose=False, 
+        n_ctx = 32768,
+        n_gpu_layers = 30
+    )
     return llm
 
 def load_index(index_filepath:str) -> faiss.swigfaiss_avx2.IndexFlatL2:
@@ -53,6 +63,26 @@ def get_context(index:faiss.swigfaiss_avx2.IndexFlatL2, chunkified_document:list
     context = "\n".join(top_chunks)
 
     return context
+
+class RAGbot:
+    def __init__(self, document_filepath:str = "data/document_chunks.json", embedding_model_name:str = "all-MiniLM-L6-v2", 
+                 index_filepath:str = "data/faiss_index.idx", model_name:str = "mistral-7b"):
+        self.document = load_document(document_filepath)
+        self.embedder = SentenceTransformer(embedding_model_name)
+        self.index = load_index(index_filepath)
+        self.llm = load_llm(model_name)
+
+    def chat(self, query:str) -> str:
+        query_embeddings = self.embedder.encode([query])
+        context = get_context(self.index, self.document, query_embeddings)
+        prompt = ("You are an expert virtual assistant for the PROTON Website. Using the context provided, give a **short and factual answer** to the question in plain text. "
+                  "Do not use formatting and add any extra content. If you are asked a question that is not relevant to the context, reply: 'I am sorry, I cannot answer this question.'. "
+                  "If the question is relevant to the context but not explicitly mentioned, reply: 'Please reach out to contact@protonstudy.com for this query!'"
+                  "If the user uses pleasantries, reply in kind but quickly ask them to stick to PROTON related questions."
+                  f"\nContext: {context}\nQuestion: {query}\nAnswer: ")
+        response = self.llm(prompt, max_tokens=4096)
+        cleaned_response = response_cleaner(response['choices'][0]['text'])
+        return cleaned_response
 
 def main():
     document_filepath = "data/document_chunks.json"
@@ -76,12 +106,14 @@ def main():
         query_embeddings = embedder.encode([query])
 
         context = get_context(index, chunkified_document, query_embeddings)
+        # print(context)
 
-        prompt = ("You are an expert assistant. Using the context provided, give a **concise and factual answer** to the question in plain text. "
-                  "Do not use formatting and add any extra content. If you do not find the answer in the context, say you do not know. "
+        prompt = ("You are an expert assistant. Using the context provided, give a **short and factual answer** to the question in plain text. "
+                  "Do not use formatting and add any extra content. If you are asked a question that is not relevant to the context, reply: 'I am sorry, I cannot answer this question.'. "
+                  "If the question is relevant to the context but not explicitly mentioned, reply: 'Please reach out to Rachel for this query!'"
                   f"\nContext: {context}\nQuestion: {query}\nAnswer: ")
 
-        response = llm(prompt, max_tokens=2048)
+        response = llm(prompt, max_tokens=4096)
         cleaned_response = response_cleaner(response['choices'][0]['text'])
 
         print(cleaned_response)

@@ -91,14 +91,14 @@ def chunkify_document(document:list[langchain_core.documents.base.Document], tok
                 heading += f" < ## {minor_heading}"
             if sub_heading:
                 heading += f" < ### {sub_heading}"
-            full_text = heading + '\nContent:' + section.page_content.strip()
+            full_text = heading + '\nContent:' + content.strip()
 
             # chunk = f"Major Heading: {major_heading},\nMinor Heading: {minor_heading},\nSub Heading: {sub_heading},\nContent: {content}\n"
             final_chunkified_document.append(full_text)
     
     return final_chunkified_document
 
-def md_doc_reader(filepath:str, token_limit:int = 200) -> list[str]:
+def md_doc_reader(filepath:str, token_limit:int = 120) -> list[str]:
     markdown_text = open(filepath).read()
 
     # Define the Markdown splitter, along with headers for dividing the file
